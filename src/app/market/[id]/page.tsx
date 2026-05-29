@@ -153,6 +153,134 @@ function LiveLineProfile({data}:{data:CP[]}) {
   );
 }
 
+function TradingTerminal({yP,nP,liquidity}:{yP:number;nP:number;liquidity:number}) {
+  const [side,setSide]=useState<'YES'|'NO'>('YES');
+  const [amount,setAmount]=useState('100');
+  const amt=Math.max(0,parseFloat(amount)||0);
+  const priceCents=side==='YES'?yP:nP;                 // implied probability == price in cents
+  const pricePerShare=priceCents/100;                  // dollars per share
+  const shares=pricePerShare>0?amt/pricePerShare:0;
+  const maxPayout=shares;                              // each winning share settles at $1
+  const profit=maxPayout-amt;
+  const roi=amt>0?(profit/amt)*100:0;
+  // Slippage grows with order size relative to pool liquidity.
+  const liq=Math.max(1,liquidity);
+  const slippage=Math.min(18,(amt/liq)*100*1.4);
+  const fillPrice=Math.min(99.5,priceCents*(1+slippage/100));
+  const accent=side==='YES'?'#26a69a':'#ef5350';
+
+  const QUICK=[50,100,500,1000];
+  return (
+    <div className="rounded-xl p-3" style={{border:'1px solid rgba(255,255,255,0.06)',background:'rgba(12,16,24,0.85)'}}>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[11px] font-semibold text-white">Trade Terminal</h3>
+        <span className="font-mono text-[9px] text-slate-500">sub-$1 contracts</span>
+      </div>
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <button onClick={()=>setSide('YES')} className="rounded-lg py-2 text-center transition" style={{background:side==='YES'?'rgba(38,166,154,0.18)':'rgba(255,255,255,0.03)',border:`1px solid ${side==='YES'?'rgba(38,166,154,0.5)':'rgba(255,255,255,0.06)'}`}}>
+          <div className="text-[9px] font-bold uppercase tracking-wider" style={{color:'#26a69a'}}>YES</div>
+          <div className="mt-0.5 font-mono text-sm font-black" style={{color:'#26a69a'}}>{yP}¢</div>
+        </button>
+        <button onClick={()=>setSide('NO')} className="rounded-lg py-2 text-center transition" style={{background:side==='NO'?'rgba(239,83,80,0.18)':'rgba(255,255,255,0.03)',border:`1px solid ${side==='NO'?'rgba(239,83,80,0.5)':'rgba(255,255,255,0.06)'}`}}>
+          <div className="text-[9px] font-bold uppercase tracking-wider" style={{color:'#ef5350'}}>NO</div>
+          <div className="mt-0.5 font-mono text-sm font-black" style={{color:'#ef5350'}}>{nP}¢</div>
+        </button>
+      </div>
+      <label className="mb-1 block text-[9px] font-medium uppercase tracking-wider text-slate-500">Amount (USD)</label>
+      <div className="flex items-center rounded-lg px-2" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
+        <span className="font-mono text-xs text-slate-500">$</span>
+        <input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value.replace(/[^0-9.]/g,''))} className="w-full bg-transparent px-1.5 py-2 font-mono text-sm font-bold text-white outline-none" placeholder="0" />
+      </div>
+      <div className="mt-2 flex gap-1.5">
+        {QUICK.map(q=>(
+          <button key={q} onClick={()=>setAmount(String(q))} className="flex-1 rounded-md py-1 font-mono text-[9px] font-bold text-slate-400 transition hover:text-white" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>${q}</button>
+        ))}
+      </div>
+      <div className="mt-3 space-y-1.5 rounded-lg p-2.5" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.05)'}}>
+        {[
+          ['Implied probability',`${priceCents}%`,'#94a3b8'],
+          ['Target shares',shares.toLocaleString(undefined,{maximumFractionDigits:1}),'#f5f7fa'],
+          ['Est. fill price',`${fillPrice.toFixed(1)}¢`,'#94a3b8'],
+          ['Slippage est.',`${slippage.toFixed(2)}%`,slippage>5?'#ef5350':'#94a3b8'],
+          ['Max payout',fmtN(maxPayout),'#26a69a'],
+        ].map(([l,v,c])=>(
+          <div key={l} className="flex items-center justify-between text-[10px]"><span className="text-slate-500">{l}</span><span className="font-mono font-bold tabular-nums" style={{color:c as string}}>{v}</span></div>
+        ))}
+        <div className="mt-1 flex items-center justify-between border-t border-white/[0.06] pt-1.5 text-[10px]">
+          <span className="text-slate-500">Max ROI</span>
+          <span className="font-mono text-[13px] font-black tabular-nums" style={{color:clsC(roi)}}>{roi>0?'+':''}{roi.toFixed(1)}%</span>
+        </div>
+      </div>
+      <button className="mt-3 w-full rounded-lg py-2.5 text-center text-[11px] font-bold text-white transition hover:opacity-90" style={{background:accent}}>
+        Buy {side} · {fmtN(amt)}
+      </button>
+      <p className="mt-1.5 text-center text-[8px] leading-tight text-slate-600">Preview only — routing executes on the source venue.</p>
+    </div>
+  );
+}
+
+interface OBRow { price: number; size: number; }
+function MicroOrderBook({yP,liquidity,seed}:{yP:number;liquidity:number;seed:string}) {
+  const [book,setBook]=useState<{bids:OBRow[];asks:OBRow[]}>({bids:[],asks:[]});
+  const [flash,setFlash]=useState<Set<number>>(new Set());
+  const prevRef=useRef<Record<number,number>>({});
+
+  useEffect(()=>{
+    // Build & continuously perturb a deterministic ladder around the YES mid price.
+    const baseUnit=(s:string)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return((h>>>0)%1000)/1000;};
+    const liq=Math.max(500,liquidity);
+    const build=()=>{
+      const asks:OBRow[]=[],bids:OBRow[]=[];
+      for(let i=1;i<=6;i++){
+        const ap=Math.min(99,yP+i);
+        const bp=Math.max(1,yP-i);
+        const aSize=Math.round(liq*(0.04+baseUnit(`${seed}-a-${i}`)*0.12)*(0.7+Math.random()*0.6));
+        const bSize=Math.round(liq*(0.04+baseUnit(`${seed}-b-${i}`)*0.12)*(0.7+Math.random()*0.6));
+        asks.push({price:ap,size:aSize});
+        bids.push({price:bp,size:bSize});
+      }
+      const changed=new Set<number>();
+      [...asks,...bids].forEach(r=>{const p=prevRef.current[r.price];if(p!==undefined&&p!==r.size)changed.add(r.price);prevRef.current[r.price]=r.size;});
+      setBook({asks:asks.reverse(),bids});
+      if(changed.size){setFlash(changed);setTimeout(()=>setFlash(new Set()),400);}
+    };
+    build();
+    const t=setInterval(build,2500);
+    return()=>clearInterval(t);
+  },[yP,liquidity,seed]);
+
+  const spread=book.asks.length&&book.bids.length?(book.asks[book.asks.length-1].price-book.bids[0].price):0;
+  const maxSize=Math.max(1,...book.asks.map(r=>r.size),...book.bids.map(r=>r.size));
+
+  const Row=({r,kind}:{r:OBRow;kind:'ask'|'bid'})=>{
+    const color=kind==='ask'?'#ef5350':'#26a69a';
+    const isNew=flash.has(r.price);
+    return (
+      <div className={`relative flex items-center justify-between px-2 py-[3px] font-mono text-[10px] ${isNew?(kind==='ask'?'row-flash-sell':'row-flash-buy'):''}`}>
+        <span className="absolute inset-y-0 right-0" style={{width:`${(r.size/maxSize)*100}%`,background:kind==='ask'?'rgba(239,83,80,0.10)':'rgba(38,166,154,0.10)'}} />
+        <span className="relative z-10 font-bold" style={{color}}>{r.price}¢</span>
+        <span className="relative z-10 tabular-nums text-slate-400">{r.size.toLocaleString()}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="rounded-xl p-3" style={{border:'1px solid rgba(255,255,255,0.06)',background:'rgba(12,16,24,0.85)'}}>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-[11px] font-semibold text-white">Order Book</h3>
+        <span className="font-mono text-[9px] text-slate-500">spread {spread}¢</span>
+      </div>
+      <div className="space-y-px">
+        {book.asks.map(r=><Row key={'a'+r.price} r={r} kind="ask" />)}
+        <div className="flex items-center justify-center gap-1 py-1 font-mono text-[11px] font-black" style={{color:'#26a69a'}}>
+          {yP}¢ <span className="text-[8px] font-normal text-slate-600">mid</span>
+        </div>
+        {book.bids.map(r=><Row key={'b'+r.price} r={r} kind="bid" />)}
+      </div>
+    </div>
+  );
+}
+
 export default function MarketPage({params}:{params:Promise<{id:string}>}) {
   const {id}=use(params);
   const [market,setMarket]=useState<MD|null>(null);
@@ -259,7 +387,7 @@ export default function MarketPage({params}:{params:Promise<{id:string}>}) {
         </div>
 
         {/* Main Grid */}
-        <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
           {/* Left: Chart + Ledger */}
           <div className="space-y-4">
             {/* Chart */}
@@ -329,6 +457,10 @@ export default function MarketPage({params}:{params:Promise<{id:string}>}) {
 
           {/* Sidebar */}
           <div className="space-y-4">
+            <div className="lg:sticky lg:top-16 space-y-4">
+              <TradingTerminal yP={yP} nP={nP} liquidity={liq} />
+              <MicroOrderBook yP={yP} liquidity={liq} seed={market.id} />
+            </div>
             <div className="rounded-xl p-3" style={{border:'1px solid rgba(255,255,255,0.06)',background:'rgba(12,16,24,0.8)'}}>
               <h3 className="mb-3 text-[11px] font-semibold text-white">📊 Analytics</h3>
               <div className="grid grid-cols-2 gap-2">

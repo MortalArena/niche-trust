@@ -69,6 +69,32 @@ th[class*='text-right'] {
   animation: rowFlashSell 400ms ease-out;
 }
 
+/* Probability velocity tickers: glow the value when it moves up/down. */
+@keyframes tickUp {
+  0% { color: #22c55e; text-shadow: 0 0 8px rgba(34, 197, 94, 0.9); background: rgba(34, 197, 94, 0.16); }
+  100% { text-shadow: none; background: transparent; }
+}
+
+@keyframes tickDown {
+  0% { color: #ef4444; text-shadow: 0 0 8px rgba(239, 68, 68, 0.9); background: rgba(239, 68, 68, 0.16); }
+  100% { text-shadow: none; background: transparent; }
+}
+
+.tick-up {
+  animation: tickUp 600ms ease-out;
+  border-radius: 4px;
+}
+
+.tick-down {
+  animation: tickDown 600ms ease-out;
+  border-radius: 4px;
+}
+
+/* Neon rank glows for leaderboard podium. */
+.glow-gold { color: #facc15; text-shadow: 0 0 10px rgba(250, 204, 21, 0.6); }
+.glow-silver { color: #cbd5e1; text-shadow: 0 0 10px rgba(203, 213, 225, 0.55); }
+.glow-bronze { color: #d98a4f; text-shadow: 0 0 10px rgba(217, 138, 79, 0.55); }
+
 select,
 input,
 textarea,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 interface Market {
@@ -108,25 +108,45 @@ export default function HomePage() {
   const [platformFilter, setPlatformFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [trendWindow, setTrendWindow] = useState(TREND_WINDOWS[0]);
+  // Probability velocity: track previous YES% per market and flash the cell on change.
+  const prevPricesRef = useRef<Record<string, number>>({});
+  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
 
-  const fetchMarkets = useCallback(async () => {
+  const applyFlashes = useCallback((next: Market[]) => {
+    const prev = prevPricesRef.current;
+    const changed: Record<string, 'up' | 'down'> = {};
+    for (const m of next) {
+      const before = prev[m.id];
+      if (before !== undefined && before !== m.yes_price) {
+        changed[m.id] = m.yes_price > before ? 'up' : 'down';
+      }
+      prev[m.id] = m.yes_price;
+    }
+    if (Object.keys(changed).length > 0) {
+      setFlashes(changed);
+      setTimeout(() => setFlashes({}), 650);
+    }
+  }, []);
+
+  const fetchMarkets = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const r = await fetch(`/api/markets/live?cat=${cat}&page=${page}&limit=200`);
       const j: MarketsResponse = await r.json();
       let ms = j.markets || [];
       if (platformFilter !== 'all') {
         ms = ms.filter((m) => m.platform === platformFilter);
       }
+      applyFlashes(ms);
       setMarkets(ms);
       setTotalPages(j.total_pages || 1);
       setPlatforms(j.platforms || {});
     } catch {
-      setMarkets([]);
+      if (!silent) setMarkets([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [cat, page, platformFilter]);
+  }, [cat, page, platformFilter, applyFlashes]);
 
   const fetchTrades = useCallback(async () => {
     try {
@@ -138,8 +158,16 @@ export default function HomePage() {
     }
   }, []);
 
+  // Reset velocity baseline whenever the filter set changes.
+  useEffect(() => {
+    prevPricesRef.current = {};
+    setFlashes({});
+  }, [cat, page, platformFilter]);
+
   useEffect(() => {
     fetchMarkets();
+    const i = setInterval(() => fetchMarkets(true), 10000);
+    return () => clearInterval(i);
   }, [fetchMarkets]);
 
   useEffect(() => {
@@ -159,6 +187,7 @@ export default function HomePage() {
     .reduce((sum, t) => sum + t.total_value, 0);
   const sellVolume = Math.max(0, trendVolume - buyVolume);
   const buyShare = trendVolume ? (buyVolume / trendVolume) * 100 : 0;
+  const maxLiq = markets.reduce((mx, m) => Math.max(mx, m.liquidity), 1);
 
   return (
     <div className="min-h-screen bg-[#090d11] text-white">
@@ -289,9 +318,10 @@ export default function HomePage() {
                       <tr className="bg-white/[0.02] text-[9px] uppercase tracking-wider text-slate-500">
                         <th className="px-2 py-2.5 font-medium" style={{ width: 36 }}>#</th>
                         <th className="px-2 py-2.5 font-medium">Market</th>
+                        <th className="px-2 py-2.5 font-medium text-right" style={{ width: 64 }}>Prob</th>
                         <th className="px-2 py-2.5 font-medium text-right">MCAP</th>
                         <th className="px-2 py-2.5 font-medium text-right">Volume</th>
-                        <th className="px-2 py-2.5 font-medium text-right">Liq</th>
+                        <th className="px-2 py-2.5 font-medium" style={{ width: 110 }}>Liquidity</th>
                         <th className="px-2 py-2.5 font-medium text-right">Txns</th>
                         <th className="px-2 py-2.5 font-medium text-right">Traders</th>
                         <th className="px-2 py-2.5 font-medium text-right">Age</th>
@@ -326,9 +356,27 @@ export default function HomePage() {
                                 </span>
                               </Link>
                             </td>
+                            <td className="px-2 py-2 text-right">
+                              <span
+                                className={`inline-block px-1 font-mono text-[12px] font-black tabular-nums ${flashes[m.id] === 'up' ? 'tick-up' : flashes[m.id] === 'down' ? 'tick-down' : ''}`}
+                                style={{ color: flashes[m.id] ? undefined : '#26a69a' }}
+                              >
+                                {m.yes_price}%
+                              </span>
+                            </td>
                             <td className="px-2 py-2 text-right font-mono text-slate-300">{fmtN(m.mcap)}</td>
                             <td className="px-2 py-2 text-right font-mono text-slate-300">{fmtN(m.volume_24h)}</td>
-                            <td className="px-2 py-2 text-right font-mono text-slate-300">{fmtN(m.liquidity)}</td>
+                            <td className="px-2 py-2">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="font-mono text-slate-300">{fmtN(m.liquidity)}</span>
+                                <span className="h-1.5 w-12 overflow-hidden rounded-full bg-white/[0.06]">
+                                  <span
+                                    className="block h-full rounded-full"
+                                    style={{ width: `${Math.max(4, Math.min(100, (m.liquidity / maxLiq) * 100))}%`, background: m.liquidity / maxLiq > 0.5 ? '#26a69a' : m.liquidity / maxLiq > 0.2 ? '#3b82f6' : '#64748b' }}
+                                  />
+                                </span>
+                              </div>
+                            </td>
                             <td className="px-2 py-2 text-right font-mono text-slate-300">{m.txns.toLocaleString()}</td>
                             <td className="px-2 py-2 text-right font-mono text-slate-300">{m.traders.toLocaleString()}</td>
                             <td className="px-2 py-2 text-right font-mono text-slate-400">{fmtAge(m.age_hours)}</td>
@@ -357,7 +405,7 @@ export default function HomePage() {
                       })}
                       {markets.length === 0 && (
                         <tr>
-                          <td colSpan={14} className="py-12 text-center text-xs text-slate-500">No markets found</td>
+                          <td colSpan={15} className="py-12 text-center text-xs text-slate-500">No markets found</td>
                         </tr>
                       )}
                     </tbody>

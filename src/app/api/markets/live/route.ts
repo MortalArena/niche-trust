@@ -43,6 +43,28 @@ function parsePrices(raw: string | undefined): [number, number] {
   return [50, 50];
 }
 
+// Deterministic 32-bit hash from a string seed (FNV-1a style).
+function hashSeed(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// Stable pseudo-random in [0,1) derived from a seed string + salt.
+// Same market id always yields the same value, so polled data does not flicker.
+function seededUnit(seed: string, salt: string): number {
+  const h = hashSeed(`${seed}:${salt}`);
+  return (h % 100000) / 100000;
+}
+
+// Stable signed change in [-range, range] for a market id + window.
+function seededChange(seed: string, salt: string, range: number): number {
+  return +(((seededUnit(seed, salt) * 2 - 1) * range).toFixed(1));
+}
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
     const ctl = new AbortController();
@@ -91,11 +113,12 @@ export async function GET(req: Request) {
       liquidity: Math.round(liq),
       txns: Math.max(10, Math.round(vol / 500)),
       mcap: Math.round(liq * 8 + vol * 0.3),
-      price_change_24h: +(Math.random() * 30 - 15).toFixed(1),
-      price_change_6h: +(Math.random() * 20 - 10).toFixed(1),
-      price_change_1h: +(Math.random() * 10 - 5).toFixed(1),
-      price_change_5m: +(Math.random() * 6 - 3).toFixed(1),
-      age_hours: m.createdAt ? Math.max(0.1, (Date.now() - new Date(m.createdAt).getTime()) / 3600000) : Math.random() * 168,
+      // Deterministic per-market changes so polled data stays stable (no flicker).
+      price_change_24h: seededChange(m.id, '24h', 15),
+      price_change_6h: seededChange(m.id, '6h', 10),
+      price_change_1h: seededChange(m.id, '1h', 5),
+      price_change_5m: seededChange(m.id, '5m', 3),
+      age_hours: m.createdAt ? Math.max(0.1, (Date.now() - new Date(m.createdAt).getTime()) / 3600000) : 1 + seededUnit(m.id, 'age') * 168,
       traders: Math.max(5, Math.round(vol / 1500)),
       category: cat,
       image_url: imageUrl,
@@ -137,12 +160,13 @@ export async function GET(req: Request) {
     const baseLiq = allMarkets.reduce((s, m) => s + m.liquidity, 0) / Math.max(allMarkets.length, 1);
     for (let i = 0; i < plat.count; i++) {
       const seed = `sim-${plat.name}-${i}`;
-      const vol = Math.round((totalVol / 1000) * (Math.random() * 2 + 0.1));
-      const liq = Math.round(baseLiq * (Math.random() * 1.5 + 0.2));
+      const vol = Math.round((totalVol / 1000) * (seededUnit(seed, 'vol') * 2 + 0.1));
+      const liq = Math.round(baseLiq * (seededUnit(seed, 'liq') * 1.5 + 0.2));
+      const yesP = 0.4 + seededUnit(seed, 'yes') * 0.2;
       addMarket({
         id: seed,
         question: `${plat.name.toUpperCase()} Prediction Market #${i + 1}`,
-        outcomePrices: JSON.stringify([0.4 + Math.random() * 0.2, 0.4 + Math.random() * 0.2]),
+        outcomePrices: JSON.stringify([yesP, 1 - yesP]),
         volumeNum: vol,
         liquidityNum: liq,
         image: null,
