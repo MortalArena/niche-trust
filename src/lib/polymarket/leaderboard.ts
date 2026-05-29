@@ -376,8 +376,10 @@ export async function getLeaderboard(options?: {
       // Master Score calculation
       const masterScore = (winRate * 0.50) + (roi * 0.30) + (totalTrades * 0.20);
       
-      // Generate wallet address
-      const hexWallet = `0x${((i * 123456789) % 0xffffffff).toString(16).padStart(8, '0')}...${((i * 987654321) % 0xffff).toString(16).padStart(4, '0')}`;
+      // Generate a valid, full 42-character Ethereum address (signature format: prefix + 28 zeros + index as hex suffix)
+      const prefix = ((i * 123456789) % 0xffffffff).toString(16).padStart(8, '0');
+      const suffix = i.toString(16).padStart(4, '0');
+      const hexWallet = `0x${prefix}0000000000000000000000000000${suffix}`;
       
       // Generate Display Name
       let displayName: string | null = null;

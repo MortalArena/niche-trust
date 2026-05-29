@@ -576,18 +576,28 @@ function guessCategory(marketTitle: string): string {
 
 function generateMockTraderProfile(wallet: string): TraderProfile {
   // Extract a seed from the wallet address
-  const cleanWallet = wallet.replace(/0x/i, '').replace(/\./g, '');
-  let seed = 0;
-  for (let i = 0; i < cleanWallet.length; i++) {
-    seed = ((seed << 5) - seed + cleanWallet.charCodeAt(i)) | 0;
+  const cleanWallet = wallet.replace(/0x/i, '').toLowerCase();
+  
+  let idx = 1;
+  if (cleanWallet.includes('000000000000000000000000')) {
+    const last4 = cleanWallet.slice(-4);
+    const parsed = parseInt(last4, 16);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= 2500) {
+      idx = parsed;
+    }
+  } else {
+    // Fallback deterministic hashing for arbitrary wallets
+    let seed = 0;
+    const hashable = cleanWallet.replace(/\./g, '');
+    for (let i = 0; i < hashable.length; i++) {
+      seed = ((seed << 5) - seed + hashable.charCodeAt(i)) | 0;
+    }
+    idx = (Math.abs(seed) % 2500) + 1;
   }
-  seed = Math.abs(seed);
-
+  
   const prefixes = ["Alpha", "Beta", "Sigma", "Quantum", "Hyper", "Macro", "Mega", "Delta", "Crypto", "Pundit", "Bayes", "Oracle", "Super", "Trend", "Edge", "Degen", "Arbitrage", "Hedge", "Limit", "Yield"];
   const suffixes = ["Trader", "Forecaster", "Predictor", "Pundit", "Speculator", "Alpha", "Whisperer", "Bull", "Bear", "Wizard", "Sage", "Signal", "Whale", "Oracle", "Sniper", "Master", "Sage", "Tracker"];
 
-  const idx = seed % 2500 + 1;
-  
   // Deterministic metrics matching the leaderboard mock generator
   let winRate: number, roi: number, totalTrades: number, totalVolumeUsd: number;
   
@@ -801,14 +811,31 @@ export async function GET(
 
     const normalized = wallet.toLowerCase();
 
-    // Try fetching from Polymarket API first
-    const [profile, rawTrades, positions, closedPositions, activity] = await Promise.all([
-      fetchPolymarketProfile(normalized),
-      fetchPolymarketTrades(normalized),
-      fetchPolymarketPositions(normalized),
-      fetchPolymarketClosedPositions(normalized),
-      fetchPolymarketActivity(normalized),
-    ]);
+    // Skip Polymarket fetch if it's a mock wallet (contains signature 24 consecutive zeros) OR has invalid format (contains ellipsis)
+    const isMock = normalized.includes('000000000000000000000000') || normalized.includes('...');
+    
+    let profile = null;
+    let rawTrades: any[] = [];
+    let positions: any[] = [];
+    let closedPositions: any[] = [];
+    let activity: any[] = [];
+    
+    if (!isMock) {
+      // Try fetching from Polymarket API first for valid real wallets
+      const results = await Promise.allSettled([
+        fetchPolymarketProfile(normalized),
+        fetchPolymarketTrades(normalized),
+        fetchPolymarketPositions(normalized),
+        fetchPolymarketClosedPositions(normalized),
+        fetchPolymarketActivity(normalized),
+      ]);
+      
+      profile = results[0].status === 'fulfilled' ? results[0].value : null;
+      rawTrades = results[1].status === 'fulfilled' ? results[1].value ?? [] : [];
+      positions = results[2].status === 'fulfilled' ? results[2].value ?? [] : [];
+      closedPositions = results[3].status === 'fulfilled' ? results[3].value ?? [] : [];
+      activity = results[4].status === 'fulfilled' ? results[4].value ?? [] : [];
+    }
 
     // If we got real trade data, process it
     if (rawTrades.length > 0 || positions.length > 0) {

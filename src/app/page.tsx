@@ -204,16 +204,16 @@ export default function HomePage() {
   }, [markets.length, loading]);
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const trendingTrades = trades
+  const filteredTrades = trades
     .filter((t) => nowSeconds - t.timestamp <= trendWindow.seconds)
-    .sort((a, b) => b.total_value - a.total_value)
-    .slice(0, 15);
+    .sort((a, b) => b.total_value - a.total_value);
+  const trendingTrades = filteredTrades.length > 0 ? filteredTrades.slice(0, 15) : [...trades].sort((a, b) => b.total_value - a.total_value).slice(0, 15);
   const trendVolume = trendingTrades.reduce((sum, t) => sum + t.total_value, 0);
   const buyVolume = trendingTrades
     .filter((t) => t.side === 'BUY')
     .reduce((sum, t) => sum + t.total_value, 0);
   const sellVolume = Math.max(0, trendVolume - buyVolume);
-  const buyShare = trendVolume ? (buyVolume / trendVolume) * 100 : 0;
+  const buyShare = trendVolume ? (buyVolume / trendVolume) * 100 : 50;
 
   // Sorting markets by absolute velocity to find fastest movers
   const velocityMovers = [...markets]
@@ -387,14 +387,14 @@ export default function HomePage() {
                         <th className="px-2.5 py-3 font-semibold text-center" style={{ width: 40 }}>#</th>
                         <th className="px-3 py-3 font-semibold">Event Target Asset</th>
                         <th className="px-2 py-3 font-semibold text-right">Probability</th>
-                        <th className="px-2 py-3 font-semibold text-right">1h Shift</th>
-                        <th className="px-2 py-3 font-semibold text-right">Velocity</th>
+                        <th className="px-2 py-3 font-semibold text-right hidden sm:table-cell">1h Shift</th>
+                        <th className="px-2 py-3 font-semibold text-right hidden md:table-cell">Velocity</th>
                         <th className="px-2 py-3 font-semibold text-right">24h Vol</th>
-                        <th className="px-2 py-3 font-semibold">Liquidity Depth</th>
-                        <th className="px-2 py-3 font-semibold text-right">MCAP</th>
-                        <th className="px-2 py-3 font-semibold text-right">Txns</th>
-                        <th className="px-2 py-3 font-semibold text-right">Traders</th>
-                        <th className="px-2 py-3 font-semibold text-center" style={{ width: 110 }}>Sentiment Depth</th>
+                        <th className="px-2 py-3 font-semibold hidden md:table-cell">Liquidity Depth</th>
+                        <th className="px-2 py-3 font-semibold text-right hidden lg:table-cell">MCAP</th>
+                        <th className="px-2 py-3 font-semibold text-right hidden lg:table-cell">Txns</th>
+                        <th className="px-2 py-3 font-semibold text-right hidden xl:table-cell">Traders</th>
+                        <th className="px-2 py-3 font-semibold text-center hidden xl:table-cell" style={{ width: 110 }}>Sentiment Depth</th>
                         <th className="px-2 py-3 text-center" style={{ width: 60 }}>Action</th>
                       </tr>
                     </thead>
@@ -437,13 +437,13 @@ export default function HomePage() {
                                 </div>
                               </Link>
                             </td>
-                            <td className="px-2 py-2 text-right font-black text-white text-[11px] tabular-nums">
+                             <td className="px-2 py-2 text-right font-black text-white text-[11px] tabular-nums">
                               {yesW}%
                             </td>
-                            <td className="px-2 py-2 text-right font-bold tabular-nums" style={{ color: clsC(m.price_change_1h) }}>
+                            <td className="px-2 py-2 text-right font-bold tabular-nums hidden sm:table-cell" style={{ color: clsC(m.price_change_1h) }}>
                               {m.price_change_1h >= 0 ? '+' : ''}{m.price_change_1h.toFixed(1)}%
                             </td>
-                            <td className="px-2 py-2 text-right font-bold tabular-nums">
+                            <td className="px-2 py-2 text-right font-bold tabular-nums hidden md:table-cell">
                               <span
                                 className="rounded px-1 py-px text-[9px]"
                                 style={{
@@ -455,7 +455,7 @@ export default function HomePage() {
                               </span>
                             </td>
                             <td className="px-2 py-2 text-right font-bold text-slate-200 tabular-nums">{fmtN(m.volume_24h)}</td>
-                            <td className="px-2 py-2 vertical-align-middle">
+                            <td className="px-2 py-2 vertical-align-middle hidden md:table-cell">
                               <div className="flex items-center gap-2">
                                 <div className="h-1.5 w-16 overflow-hidden rounded bg-zinc-900">
                                   <div className="h-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.6)]" style={{ width: `${liqPct}%` }} />
@@ -463,10 +463,10 @@ export default function HomePage() {
                                 <span className="text-[9px] text-zinc-400 font-bold">{fmtN(m.liquidity)}</span>
                               </div>
                             </td>
-                            <td className="px-2 py-2 text-right text-zinc-400 tabular-nums">{fmtN(m.mcap)}</td>
-                            <td className="px-2 py-2 text-right text-zinc-400 tabular-nums">{m.txns.toLocaleString()}</td>
-                            <td className="px-2 py-2 text-right text-zinc-400 tabular-nums">{m.traders.toLocaleString()}</td>
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2 text-right text-zinc-400 tabular-nums hidden lg:table-cell">{fmtN(m.mcap)}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400 tabular-nums hidden lg:table-cell">{m.txns.toLocaleString()}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400 tabular-nums hidden xl:table-cell">{m.traders.toLocaleString()}</td>
+                            <td className="px-2 py-2 hidden xl:table-cell">
                               <div className="mx-auto flex h-1 overflow-hidden rounded bg-zinc-900" style={{ width: 80 }}>
                                 <div className="h-full bg-emerald-500 shadow-[0_0_4px_#10b981]" style={{ width: `${yesW}%` }} />
                                 <div className="h-full bg-red-500 shadow-[0_0_4px_#ef4444]" style={{ width: `${noW}%` }} />
