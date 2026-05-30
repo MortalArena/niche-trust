@@ -36,6 +36,7 @@ interface Trade {
   total_value: number;
   timestamp: number;
   time_ago: string;
+  market?: string;
 }
 
 interface MarketsResponse {
@@ -563,23 +564,30 @@ export default function HomePage() {
 
               <div className="space-y-1 overflow-y-auto max-h-[290px] pr-1.5 scrollbar-thin">
                 {trendingTrades.map((t, i) => (
-                  <div key={`${t.id}-${i}`} className="flex items-center gap-1.5 rounded border border-zinc-900 bg-[#090d11] px-2 py-1.5 font-mono text-[9px] hover:border-zinc-800 transition">
-                    <span className="text-zinc-600 font-bold">#{i + 1}</span>
-                    <span
-                      className="rounded px-1 py-px text-[7px] font-black"
-                      style={{
-                        background: t.side === 'BUY' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                        color: t.side === 'BUY' ? '#10b981' : '#ef4444',
-                      }}
-                    >
-                      {t.side}
-                    </span>
-                    <span className={`font-bold ${t.outcome === 'YES' ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {t.outcome}
-                    </span>
-                    <span className="font-black text-white">{fmtN(t.total_value)}</span>
-                    <span className="text-zinc-400">{(t.price * 100).toFixed(0)}¢</span>
-                    <span className="ml-auto text-[8px] text-zinc-500 tabular-nums">{t.time_ago}</span>
+                  <div key={`${t.id}-${i}`} className="flex flex-col gap-1 rounded border border-zinc-900 bg-[#090d11] px-2.5 py-2 font-mono text-[9px] hover:border-zinc-800 transition">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-zinc-600 font-bold">#{i + 1}</span>
+                      <span
+                        className="rounded px-1 py-px text-[7px] font-black"
+                        style={{
+                          background: t.side === 'BUY' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                          color: t.side === 'BUY' ? '#10b981' : '#ef4444',
+                        }}
+                      >
+                        {t.side}
+                      </span>
+                      <span className={`font-bold ${t.outcome === 'YES' ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {t.outcome}
+                      </span>
+                      <span className="font-black text-white">{fmtN(t.total_value)}</span>
+                      <span className="text-zinc-400">{(t.price * 100).toFixed(0)}¢</span>
+                      <span className="ml-auto text-[8px] text-zinc-500 tabular-nums">{t.time_ago}</span>
+                    </div>
+                    {t.market && (
+                      <div className="text-[8px] text-zinc-500 truncate" title={t.market}>
+                        {t.market}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {trendingTrades.length === 0 && (

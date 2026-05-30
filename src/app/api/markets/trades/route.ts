@@ -13,6 +13,8 @@ interface RawTrade {
   outcomeIndex: number;
   conditionId: string;
   transactionHash?: string;
+  title?: string;
+  slug?: string;
 }
 
 interface GammaMarket {
@@ -81,6 +83,7 @@ export async function GET(req: Request) {
       total_value: Math.round(t.price * t.size * 100) / 100,
       timestamp: t.timestamp,
       time_ago: ago(t.timestamp),
+      market: t.title || t.slug || 'Polymarket Event',
     });
   };
 
