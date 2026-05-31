@@ -109,8 +109,7 @@ export function LeaderboardClient() {
       const params = new URLSearchParams({
         limit: '55',
         page: String(page),
-        // Map masterScore to edgeScore for server retrieval, we will sort it on client
-        sortBy: sortBy === 'masterScore' ? 'edgeScore' : sortBy,
+        sortBy: sortBy === 'masterScore' ? 'masterPMI' : sortBy === 'v2Predictive' ? 'predictiveScore' : sortBy === 'v2Alpha' ? 'alphaScore' : sortBy === 'v2Confidence' ? 'confidenceScore' : sortBy === 'v2Risk' ? 'riskScore' : sortBy === 'v2Behavior' ? 'behaviorScore' : sortBy === 'masterPMI' ? 'masterPMI' : 'edgeScore',
       });
 
       if (selectedCategories.length > 0) {
@@ -135,16 +134,23 @@ export function LeaderboardClient() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: LeaderboardPage = await res.json();
 
-      // Enforce the Master Score Ranking Formula:
-      // Score = (AccuracyRate * 0.50) + (ROI * 0.30) + (TradeCount * 0.20)
-      // Where AccuracyRate is winRate, ROI is roi, TradeCount is totalTrades
+      // Use V2 Reputation Engine scores from API
       const enrichedEntries = (json.entries || []).map((entry) => {
         const t = entry.trader;
         const accuracy = t.winRate || 0;
         const roiVal = t.roi || 0;
         const trades = t.totalTrades || 0;
 
-        // Formula execution
+        // V2 scores from reputation engine
+        const v2 = (entry as any).v2 || {};
+        const predictiveScore = v2.predictiveScore || 0;
+        const alphaScore = v2.alphaScore || 0;
+        const confidenceScore = v2.confidenceScore || 0;
+        const behaviorScore = v2.behaviorScore || 0;
+        const riskScore = v2.riskScore || 0;
+        const masterPMI = v2.masterPMI || 0;
+
+        // Legacy master score (kept for backward compat)
         const masterScore = (accuracy * 0.50) + (roiVal * 0.30) + (trades * 0.20);
 
         // Derive consistent stable weekly momentum indicator using wallet address digits
@@ -158,6 +164,12 @@ export function LeaderboardClient() {
         return {
           ...entry,
           masterScore,
+          predictiveScore,
+          alphaScore,
+          confidenceScore,
+          behaviorScore,
+          riskScore,
+          masterPMI,
           momentum,
           pnl,
         };

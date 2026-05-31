@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import type { Prisma } from '@prisma/client';
 import { ensureSyncEngine } from '@/instrument';
+import { calculateReputation } from '@/lib/reputation';
 
 // Start the continuous sync engine on first import
 ensureSyncEngine();
@@ -123,7 +124,7 @@ export async function syncPolymarketTrader(
 
     const existing = await prisma.polymarketTrader.findUnique({
       where: { proxyWallet: queryAddress },
-      select: { categories: true },
+      select: { categories: true, id: true },
     });
 
     const mergedCategoriesList = categories.reduce(
@@ -132,6 +133,95 @@ export async function syncPolymarketTrader(
     );
 
     const polymarketUrl = `${POLYMARKET_SITE}/profile/${queryAddress}`;
+
+    // ── Save raw trades to PolymarketTrade table ──
+    const traderId = existing?.id;
+    if (traderId && allTrades.length > 0) {
+      const tradeData = allTrades.map((t: any) => ({
+        traderId,
+        marketId: t.conditionId || t.marketId || `unknown-${t.timestamp}`,
+        conditionId: t.conditionId || '',
+        marketTitle: t.title || t.market || null,
+        category: t.category || mergedCategoriesList[0] || 'general',
+        side: (t.side || 'BUY').toUpperCase(),
+        outcome: t.outcomeIndex === 1 ? 'NO' : 'YES',
+        price: t.price || 0,
+        shares: t.size || 0,
+        valueUsd: Math.round((t.price || 0) * (t.size || 0) * 100) / 100,
+        feeUsd: null,
+        entryProbability: t.price || null,
+        timestamp: new Date(t.timestamp * 1000),
+      }));
+
+      // Batch insert, skip duplicates
+      for (let i = 0; i < tradeData.length; i += 100) {
+        const batch = tradeData.slice(i, i + 100);
+        await prisma.polymarketTrade.createMany({
+          data: batch as any,
+          skipDuplicates: true,
+        }).catch(() => {}); // ignore duplicate errors
+      }
+    }
+
+    // ── Compute V2 Reputation Scores ──
+    let v2Scores = {
+      predictiveScore: 0, alphaScore: 0, confidenceScore: 0,
+      behaviorScore: 0, riskScore: 0, masterPMI: 0,
+      forecastBrier: 0.25, forecastLogLoss: 0.693, forecastCalibration: 50,
+      alpha24h: 0, alpha7d: 0, sectorAlpha: 0,
+    };
+
+    if (traderId && allTrades.length >= 5) {
+      try {
+        const savedTrades = await prisma.polymarketTrade.findMany({
+          where: { traderId },
+          orderBy: { timestamp: 'asc' },
+        });
+
+        const repTrades = savedTrades.map((t: any) => ({
+          id: t.id,
+          traderId: t.traderId,
+          marketId: t.marketId,
+          conditionId: t.conditionId,
+          marketTitle: t.marketTitle || undefined,
+          category: t.category || undefined,
+          side: t.side,
+          outcome: t.outcome,
+          price: Number(t.price),
+          shares: Number(t.shares),
+          valueUsd: Number(t.valueUsd),
+          entryProbability: t.entryProbability ? Number(t.entryProbability) : undefined,
+          timestamp: t.timestamp.getTime(),
+        }));
+
+        const marketSnapshots = new Map<string, { probability: number; timestamp: number }[]>();
+        const repPositions: any[] = [];
+
+        const reputation = calculateReputation(
+          repTrades,
+          repPositions,
+          marketSnapshots,
+          Math.max(activityDays, 1)
+        );
+
+        v2Scores = {
+          predictiveScore: reputation.predictiveScore,
+          alphaScore: reputation.alphaScore,
+          confidenceScore: reputation.confidenceScore,
+          behaviorScore: reputation.behaviorScore,
+          riskScore: reputation.riskScore,
+          masterPMI: reputation.masterPMI,
+          forecastBrier: reputation.forecastMetrics.brierScore,
+          forecastLogLoss: reputation.forecastMetrics.logLoss,
+          forecastCalibration: reputation.forecastMetrics.calibrationScore,
+          alpha24h: reputation.alphaMetrics.alpha24h,
+          alpha7d: reputation.alphaMetrics.alpha7d,
+          sectorAlpha: reputation.alphaMetrics.sectorAlpha,
+        };
+      } catch (v2Err) {
+        logger.warn({ proxyWallet, v2Err }, 'V2 reputation calculation failed, using defaults');
+      }
+    }
 
     const brief: PolymarketTraderBrief = {
       proxyWallet: queryAddress,
@@ -162,6 +252,18 @@ export async function syncPolymarketTrader(
       update: {
         ...brief,
         lastSyncedAt: new Date(),
+        predictiveScore: v2Scores.predictiveScore,
+        alphaScore: v2Scores.alphaScore,
+        confidenceScore: v2Scores.confidenceScore,
+        behaviorScore: v2Scores.behaviorScore,
+        riskScore: v2Scores.riskScore,
+        masterPMI: v2Scores.masterPMI,
+        forecastBrier: v2Scores.forecastBrier,
+        forecastLogLoss: v2Scores.forecastLogLoss,
+        forecastCalibration: v2Scores.forecastCalibration,
+        alpha24h: v2Scores.alpha24h,
+        alpha7d: v2Scores.alpha7d,
+        sectorAlpha: v2Scores.sectorAlpha,
       },
       create: {
         proxyWallet: queryAddress,
@@ -184,6 +286,18 @@ export async function syncPolymarketTrader(
         timingScore: brief.timingScore,
         categories: mergedCategoriesList,
         lastSyncedAt: new Date(),
+        predictiveScore: v2Scores.predictiveScore,
+        alphaScore: v2Scores.alphaScore,
+        confidenceScore: v2Scores.confidenceScore,
+        behaviorScore: v2Scores.behaviorScore,
+        riskScore: v2Scores.riskScore,
+        masterPMI: v2Scores.masterPMI,
+        forecastBrier: v2Scores.forecastBrier,
+        forecastLogLoss: v2Scores.forecastLogLoss,
+        forecastCalibration: v2Scores.forecastCalibration,
+        alpha24h: v2Scores.alpha24h,
+        alpha7d: v2Scores.alpha7d,
+        sectorAlpha: v2Scores.sectorAlpha,
       },
     });
 
@@ -244,6 +358,8 @@ export async function getLeaderboard(options?: {
   const validSortFields = [
     'edgeScore', 'trustScore', 'roi', 'winRate', 'consistency',
     'totalVolumeUsd', 'totalTrades', 'profitFactor', 'maxDrawdown',
+    'masterPMI', 'predictiveScore', 'alphaScore', 'confidenceScore',
+    'behaviorScore', 'riskScore',
   ];
   const validSortKey = validSortFields.includes(sortBy) ? sortBy : 'edgeScore';
   const orderBy: Record<string, 'asc' | 'desc'> = { [validSortKey]: 'desc' };
@@ -262,6 +378,10 @@ export async function getLeaderboard(options?: {
         profitFactor: true, riskLevel: true, totalTrades: true, activityDays: true,
         avgTradeSize: true, totalVolumeUsd: true, timingScore: true, categories: true,
         lastSyncedAt: true,
+        predictiveScore: true, alphaScore: true, confidenceScore: true,
+        behaviorScore: true, riskScore: true, masterPMI: true,
+        forecastBrier: true, forecastLogLoss: true, forecastCalibration: true,
+        alpha24h: true, alpha7d: true, sectorAlpha: true,
       },
     }),
   ]);
@@ -299,6 +419,15 @@ export async function getLeaderboard(options?: {
       categories: t.categories,
       polymarketUrl: `${polymarketBase}/profile/${t.proxyWallet}`,
       lastSyncedAt: t.lastSyncedAt.toISOString(),
+    },
+    // V2 scores attached to each entry
+    v2: {
+      predictiveScore: Number(t.predictiveScore) || 0,
+      alphaScore: Number(t.alphaScore) || 0,
+      confidenceScore: Number(t.confidenceScore) || 0,
+      behaviorScore: Number(t.behaviorScore) || 0,
+      riskScore: Number(t.riskScore) || 0,
+      masterPMI: Number(t.masterPMI) || 0,
     },
   }));
 

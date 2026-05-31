@@ -206,7 +206,21 @@ function buildTraderResponse(dbTrader: any, openPositions: any[], recentTradesRa
   const categories = dbTrader.categories || ['general'];
   const timingScore = Number(dbTrader.timingScore) || 50;
 
-  // Master score
+  // V2 Reputation Engine scores
+  const predictiveScore = Number(dbTrader.predictiveScore) || 0;
+  const alphaScore = Number(dbTrader.alphaScore) || 0;
+  const confidenceScore = Number(dbTrader.confidenceScore) || 0;
+  const behaviorScore = Number(dbTrader.behaviorScore) || 0;
+  const riskScore = Number(dbTrader.riskScore) || 0;
+  const masterPMI = Number(dbTrader.masterPMI) || 0;
+  const forecastBrier = Number(dbTrader.forecastBrier) || 0.25;
+  const forecastLogLoss = Number(dbTrader.forecastLogLoss) || 0.693;
+  const forecastCalibration = Number(dbTrader.forecastCalibration) || 50;
+  const alpha24h = Number(dbTrader.alpha24h) || 0;
+  const alpha7d = Number(dbTrader.alpha7d) || 0;
+  const sectorAlpha = Number(dbTrader.sectorAlpha) || 0;
+
+  // Master score (legacy)
   const masterScore = (winRate * 0.50) + (Math.min(roi, 200) * 0.30) + (Math.min(totalTrades, 500) * 0.20);
 
   // Score breakdown
@@ -305,8 +319,24 @@ function buildTraderResponse(dbTrader: any, openPositions: any[], recentTradesRa
     profileImage: null, xUsername: dbTrader.xUsername,
     verifiedBadge: dbTrader.verifiedBadge,
     polymarketUrl: `${POLYMARKET}/profile/${dbTrader.proxyWallet}`,
+
+    // V1 Legacy scores
     trustScore, edgeScore, masterScore: Math.round(masterScore * 100) / 100,
     winRate, roi, maxDrawdown, consistency, profitFactor, riskLevel, timingScore,
+
+    // V2 Reputation Engine scores
+    predictiveScore, alphaScore, confidenceScore, behaviorScore, riskScore, masterPMI,
+    v2Scores: {
+      predictiveScore,
+      alphaScore,
+      confidenceScore,
+      behaviorScore,
+      riskScore,
+      masterPMI,
+      forecast: { brier: forecastBrier, logLoss: forecastLogLoss, calibration: forecastCalibration },
+      alpha: { alpha24h, alpha7d, sectorAlpha },
+    },
+
     totalTrades, activityDays, avgTradeSize, totalVolumeUsd,
     netPnl: Math.round(netPnl * 100) / 100, avgHoldTime: Math.round(avgHoldTime * 10) / 10,
     bestTrade: Math.round(bestTrade * 100) / 100, worstTrade: Math.round(worstTrade * 100) / 100,
