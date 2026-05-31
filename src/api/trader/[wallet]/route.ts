@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getTradesForUser, getClosedPositionsForUser, getActivePositionsForUser, getActivityForUser, resolvePolymarketProfile } from '@/lib/polymarket/data';
+import { getTradesForUser, getClosedPositionsForUser, getPositionsForUser, getActivityForUser } from '@/lib/polymarket/data';
+import { resolvePolymarketProfile } from '@/lib/polymarket/profiles';
 import { calculateTrustScore } from '@/lib/analytics/trustscore';
 import { calculateEdgeScore } from '@/lib/intelligence/edge-score';
 import { buildMonthlyReturns } from '@/lib/analytics/trades-from-txs';
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ wall
       }
 
       const closedPositions = await getClosedPositionsForUser(address, 200).catch(() => []);
-      const openPositions = await getActivePositionsForUser(address, 100).catch(() => []);
+      const openPositions = await getPositionsForUser(address, 100).catch(() => []);
       const activity = await getActivityForUser(address, 50).catch(() => []);
 
       if (!allTrades.length && !closedPositions.length) {
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ wall
     }
 
     // 3. Get open positions (always fresh)
-    const openPositionsRaw = await getActivePositionsForUser(address, 50).catch(() => []);
+    const openPositionsRaw = await getPositionsForUser(address, 50).catch(() => []);
     const openPositions = openPositionsRaw.map((p: any) => ({
       market: p.title || p.conditionId || 'Unknown',
       outcome: p.outcome || 'Yes',
