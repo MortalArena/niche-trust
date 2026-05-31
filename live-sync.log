@@ -1,0 +1,115 @@
+[LIVE SYNC ENGINE] Starting...
+  - Discovers new wallets every 5 min
+  - Syncs stale traders every 20 min
+  - Refreshes on page visit
+[SYNC ERROR] 
+Invalid `p.polymarketTrader.upsert()` invocation in
+D:\New folder\niche-trust-platform\live-sync.js:90:28
+
+  87 var scores = calcScores(pnl.records, pnl.vol, pnl.rpnl, pnl.w, pnl.l, pnl.gp, pnl.gl, days, pnl.records.length);
+  88 var equityCurve = []; var run = 0; for (var i = 0; i < pnl.records.length; i++) { run += pnl.records[i].pnl; equityCurve.push(Math.round(run * 100) / 100); }
+  89 var hourlyDist = Array.from({ length: 24 }, function(_, h) { return all.filter(function(t) { return new Date((t.timestamp > 1e12 ? t.timestamp : t.timestamp * 1000)).getUTCHours() === h; }).length; });
+→ 90 await p.polymarketTrader.upsert({
+       where: {
+         proxyWallet: "0x1365e90db3cb171d647b542ecc53f40dd8434eec"
+       },
+       update: {
+         lastSyncedAt: new Date("2026-05-30T18:04:14.621Z"),
+         lastLiveData: {
+           equityCurve: [],
+           hourlyDistribution: [
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0
+           ],
+           lastTradeAt: null
+         },
+         trustScore: 38.55,
+         edgeScore: 66.25,
+         masterScore: 50,
+         roi: 0,
+         winRate: 100,
+         consistency: 75,
+         profitFactor: 5,
+         maxDrawdown: 0,
+         riskLevel: "LOW"
+       },
+       create: {
+         proxyWallet: "0x1365e90db3cb171d647b542ecc53f40dd8434eec",
+         lastSyncedAt: new Date("2026-05-30T18:04:14.621Z"),
+         lastLiveData: {
+         ~~~~~~~~~~~~
+           equityCurve: [],
+           hourlyDistribution: [
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0
+           ]
+         },
+         trustScore: 38.55,
+         edgeScore: 66.25,
+         masterScore: 50,
+         roi: 0,
+         winRate: 100,
+         consistency: 75,
+         profitFactor: 5,
+         maxDrawdown: 0,
+         riskLevel: "LOW",
+     ?   id?: String,
+     ?   displayName?: String | Null,
+     ?   pseudonym?: String | Null,
+     ?   verifiedBadge?: Boolean,
+     ?   xUsername?: String | Null,
+     ?   avgTradeSize?: Decimal,
+     ?   totalVolumeUsd?: Decimal,
+     ?   timingScore?: Decimal,
+     ?   totalTrades?: Int,
+     ?   activityDays?: Int,
+     ?   categories?: PolymarketTraderCreatecategoriesInput | String[],
+     ?   createdAt?: DateTime
+       }
+     })
+
+Unknown argument `lastLiveData`. Available options are marked with ?.
