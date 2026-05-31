@@ -79,7 +79,8 @@ export default function HomePage() {
       const params = new URLSearchParams({
         cat,
         page: String(page),
-        limit: '100',
+        limit: '200',
+        maxPages: '100',
       });
       if (debouncedSearch) params.set('search', debouncedSearch);
       const r = await fetch(`/api/markets/live?${params}`);

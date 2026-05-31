@@ -56,6 +56,18 @@ async function main() {
   tables.accounts = await p.account.findMany();
   console.log(`  accounts: ${tables.accounts.length}`);
 
+  tables.polymarketTrades = await p.polymarketTrade.findMany();
+  console.log(`  polymarketTrades: ${tables.polymarketTrades.length}`);
+
+  tables.polymarketPositions = await p.polymarketPosition.findMany();
+  console.log(`  polymarketPositions: ${tables.polymarketPositions.length}`);
+
+  tables.marketSnapshots = await p.marketSnapshot.findMany();
+  console.log(`  marketSnapshots: ${tables.marketSnapshots.length}`);
+
+  tables.traderMetricHistories = await p.traderMetricHistory.findMany();
+  console.log(`  traderMetricHistories: ${tables.traderMetricHistories.length}`);
+
   const json = JSON.stringify(tables, null, 2);
   fs.writeFileSync('db-backup.json', json);
   console.log(`\nSaved db-backup.json (${(json.length / 1024).toFixed(1)} KB)`);

@@ -32,6 +32,10 @@ async function main() {
     'agentKeys',
     'accounts',
     'sessions',
+    'polymarketTrades',
+    'polymarketPositions',
+    'marketSnapshots',
+    'traderMetricHistories',
   ];
 
   for (const table of tables) {
